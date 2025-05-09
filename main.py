@@ -31,7 +31,7 @@ app.add_middleware(
 class GenerationQuality(enum.Enum):    
     # width, height
 
-    sm = (768, 1152)
+    sm = (640, 960)
     md = (768, 1152)
     
 
