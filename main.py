@@ -1,76 +1,105 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, APIRouter
+from fastapi import Query
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 from uuid import uuid4
-from enum import Enum
-import time
 import threading
+import time
 
 app = FastAPI()
+router = APIRouter()
 
-# Enum para status das tarefas
-class TarefaStatus(str, Enum):
-    pendente = "pendente"
-    processando = "processando"
-    concluida = "concluida"
-    erro = "erro"
+# Monta arquivos estáticos da SPA
+app.mount("/static", StaticFiles(directory="static/frontend"), name="static")
+app.mount("/assets", StaticFiles(directory="static/frontend/assets"), name="assets")
+app.mount("/output", StaticFiles(directory="output"), name="output")
 
-# Modelo da requisição
-class GerarImagemRequest(BaseModel):
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+class GenerateImageRequest(BaseModel):
     prompt: str
-    quality: Optional[str] = "standard"
+    quality: Optional[str] = "sm"
     orientation: Optional[str] = "portrait"
     quantity: Optional[int] = 1
 
-# Modelo da tarefa
-class Tarefa(BaseModel):
-    id: str
-    status: TarefaStatus
-    prompt: str
-    quality: str
-    orientation: str
-    quantity: int
-    resultado: Optional[List[str]] = None
+# Armazena tarefas
+task_queue = []
+task_status = {} 
 
-fila: List[Tarefa] = []
+def process_task():
 
-class PromptModel(BaseModel):
-    prompt: str
-    quality: str
-    quantity: int
-    results
+    while True:
+        if task_queue:
+            task_id, req = task_queue.pop(0)
+            task_status[task_id]["status"] = "processing"
+            task_status[task_id]["quantity"] = 5
+            task_status[task_id]["results"] = []
+            # Simula geração de imagem
+            time.sleep(5)
+            task_status[task_id]["results"] = [
+                "00001.png",
+                "00002.png",
 
-def processar_tarefa(tarefa: Tarefa):
-    tarefa.status = TarefaStatus.processando
-    time.sleep(2)  # Simula tempo de geração da imagem
-    try:
-        # Aqui você integraria com um gerador de imagem real
-        tarefa.resultado = [f"url_falsa_imagem_{i+1}.png" for i in range(tarefa.quantity)]
-        tarefa.status = TarefaStatus.concluida
-    except Exception as e:
-        tarefa.status = TarefaStatus.erro
+                "00003.png",
 
-@app.post("/gerar-imagem", response_model=Tarefa)
-def criar_tarefa(req: GerarImagemRequest):
-    tarefa = Tarefa(
-        id=str(uuid4()),
-        status=TarefaStatus.pendente,
-        prompt=req.prompt,
-        quality=req.quality,
-        orientation=req.orientation,
-        quantity=req.quantity,
+            ]
+            task_status[task_id]["status"] = "done"
+            
+        time.sleep(0.1)
+
+# Inicia o worker em background
+threading.Thread(target=process_task, daemon=True).start()
+
+@router.post("/generate")
+def generate_image(req: GenerateImageRequest):
+    body = req.dict()
+
+    task_id = str(uuid4())
+    task_status[task_id] = {"status": "pending", "quantity": body["quantity"], "tags": [
+        "Flux1.dev",
+        "Baixa Qualidade" if body["quality"] == "sm" else "Qualidade Média",
+        "Retrato" if body["orientation"] == "portrait" else "Horizontal"
+    ], "prompt":body["prompt"]}
+
+    task_queue.append((task_id, req))
+    return {"msg": "task created successfully", "task_id": task_id}
+
+@router.get("/task/{task_id}")
+def check_task(task_id: str):
+    if task_id not in task_status:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task_status[task_id]
+
+@router.get("/tasks")
+def list_all_tasks(page: int = Query(1), limit: int = Query(5)):
+    # Ordena colocando tarefas "done" primeiro
+    sorted_items = sorted(
+        task_status.items(),
+        key=lambda item: item[1]["status"] == "done"  # False (done) vem antes de True (outros)
     )
-    # fila.append(tarefa)
-    # threading.Thread(target=processar_tarefa, args=(tarefa,), daemon=True).start()
-    return {}
 
-@app.get("/fila", response_model=List[Tarefa])
-def listar_fila():
-    return [t for t in fila if t.status in [TarefaStatus.pendente, TarefaStatus.processando]]
+    start = (page - 1) * limit
+    end = start + limit
+    paginated_items = sorted_items[start:end]
 
-@app.get("/tarefa/{tarefa_id}", response_model=Tarefa)
-def obter_tarefa(tarefa_id: str):
-    for t in fila:
-        if t.id == tarefa_id:
-            return t
-    raise HTTPException(status_code=404, detail="Tarefa não encontrada")
+    return [
+        {"task_id": task_id, **info}
+        for task_id, info in paginated_items
+    ]
+
+# Rota raiz que retorna index.html
+@app.get("/")
+def spa():
+    return FileResponse("static/frontend/index.html")
+    # return {}
+
+app.include_router(router, prefix="/api")

@@ -1,0 +1,15 @@
+meta {
+  name: tasks
+  type: http
+  seq: 4
+}
+
+get {
+  url: http://localhost:8000/api/tasks?page=1
+  body: json
+  auth: none
+}
+
+params:query {
+  page: 1
+}
