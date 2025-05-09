@@ -6,8 +6,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 from uuid import uuid4
+
+import modules.FluxGeneration
 import threading
 import time
+
+import enum
 
 app = FastAPI()
 router = APIRouter()
@@ -24,6 +28,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+class GenerationQuality(enum.Enum):    
+    # width, height
+
+    sm = (768, 1152)
+    md = (768, 1152)
+    
 
 class GenerateImageRequest(BaseModel):
     prompt: str
@@ -43,8 +53,32 @@ def process_task():
             task_status[task_id]["status"] = "processing"
             task_status[task_id]["quantity"] = 5
             task_status[task_id]["results"] = []
-            # Simula geração de imagem
-            time.sleep(5)
+            
+            for i in range(req.quantity):
+                
+                match req.orientation:
+                    case "portrait":
+                        width, height = GenerationQuality[req.quality].value
+                    case "landscape":
+                        width, height = GenerationQuality[req.quality].value[::-1]
+                
+                
+                img_object = FluxGeneration.generate(
+                    positive_prompt=req.prompt,
+                    width=width,
+                    height=height,
+                    seed=0,
+                    steps=20,
+                    sampler_name="euler",
+                    scheduler="simple",
+                    guidance=3.5,
+                )
+                
+                # Salva imagem
+                filename="output/{task_id}_{i}.png"
+                img_object.save(filename)
+                task_status[task_id]["results"].append(filename)
+
             # task_status[task_id]["results"].append("output/{imagem}.png")
             task_status[task_id]["status"] = "done"
             
@@ -64,7 +98,7 @@ def generate_image(req: GenerateImageRequest):
         "Retrato" if body["orientation"] == "portrait" else "Horizontal"
     ], "prompt":body["prompt"]}
 
-    task_queue.append((task_id, req))
+    task_queue.append((task_id, req.dict()))
     return {"msg": "task created successfully", "task_id": task_id}
 
 @router.get("/task/{task_id}")
