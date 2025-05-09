@@ -13,8 +13,8 @@ app = FastAPI()
 router = APIRouter()
 
 # Monta arquivos estáticos da SPA
-app.mount("/static", StaticFiles(directory="static/frontend"), name="static")
-app.mount("/assets", StaticFiles(directory="static/frontend/assets"), name="assets")
+# app.mount("/static", StaticFiles(directory="static/frontend"), name="static")
+# app.mount("/assets", StaticFiles(directory="static/frontend/assets"), name="assets")
 app.mount("/output", StaticFiles(directory="output"), name="output")
 
 app.add_middleware(
@@ -45,13 +45,7 @@ def process_task():
             task_status[task_id]["results"] = []
             # Simula geração de imagem
             time.sleep(5)
-            task_status[task_id]["results"] = [
-                "00001.png",
-                "00002.png",
-
-                "00003.png",
-
-            ]
+            # task_status[task_id]["results"].append("output/{imagem}.png")
             task_status[task_id]["status"] = "done"
             
         time.sleep(0.1)
