@@ -134,7 +134,7 @@ def list_all_tasks(page: int = Query(1), limit: int = Query(5)):
         {"task_id": task_id, **info}
         for task_id, info in paginated_items
     ]
-@router.get("/download/{task_id}")
+@app.get("/download/{task_id}")
 def download_task_result(task_id: str):
     if task_id not in task_status:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -164,6 +164,16 @@ def download_task_result(task_id: str):
     }
 
     return StreamingResponse(iter_file(), media_type="application/zip", headers=headers)
+
+@app.get("/gallery")
+def gallery():
+    results = []
+    
+    for task_id, info in task_status.items():
+        if info["status"] == "done":
+            results.extend(info["results"])  # Adiciona todas as imagens da tarefa
+    
+    return {"results": results}
 
 # Rota raiz que retorna index.html
 @app.get("/")
