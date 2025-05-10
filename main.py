@@ -50,38 +50,45 @@ def process_task():
     while True:
         if task_queue:
             task_id, req = task_queue.pop(0)
-            task_status[task_id]["status"] = "processing"
-            task_status[task_id]["quantity"] = 5
-            task_status[task_id]["results"] = []
+            try:
+                print(f"Processing task {task_id}")
+                task_status[task_id]["status"] = "processing"
+                task_status[task_id]["quantity"] = req.quantity
+                task_status[task_id]["results"] = []
+                
+                for i in range(req.quantity):
+                    
+                    match req.orientation:
+                        case "portrait":
+                            width, height = GenerationQuality[req.quality].value
+                        case "landscape":
+                            width, height = GenerationQuality[req.quality].value[::-1]
+                    
+                    
+                    img_object = FluxGeneration.generate(
+                        positive_prompt=req.prompt,
+                        width=width,
+                        height=height,
+                        seed=0,
+                        steps=20,
+                        sampler_name="euler",
+                        scheduler="simple",
+                        guidance=3.5,
+                    )
+                    
+                    # Salva imagem
+                    filename="output/{task_id}_{i}.png"
+                    img_object.save(filename)
+                    task_status[task_id]["results"].append(filename)
+                
+                task_status[task_id]["status"] = "done"
+                    
+            except Exception as e:
+                print(f"Error processing task {task_id}: {str(e)}")
+                task_status[task_id]["status"] = "error"
+                task_status[task_id]["error"] = str(e)
             
-            for i in range(req.quantity):
                 
-                match req.orientation:
-                    case "portrait":
-                        width, height = GenerationQuality[req.quality].value
-                    case "landscape":
-                        width, height = GenerationQuality[req.quality].value[::-1]
-                
-                
-                img_object = FluxGeneration.generate(
-                    positive_prompt=req.prompt,
-                    width=width,
-                    height=height,
-                    seed=0,
-                    steps=20,
-                    sampler_name="euler",
-                    scheduler="simple",
-                    guidance=3.5,
-                )
-                
-                # Salva imagem
-                filename="output/{task_id}_{i}.png"
-                img_object.save(filename)
-                task_status[task_id]["results"].append(filename)
-
-            # task_status[task_id]["results"].append("output/{imagem}.png")
-            task_status[task_id]["status"] = "done"
-            
         time.sleep(0.1)
 
 # Inicia o worker em background

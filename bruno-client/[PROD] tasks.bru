@@ -1,0 +1,15 @@
+meta {
+  name: [PROD] tasks
+  type: http
+  seq: 8
+}
+
+get {
+  url: https://def7-34-124-239-34.ngrok-free.app/api/tasks?page=1
+  body: json
+  auth: none
+}
+
+params:query {
+  page: 1
+}
