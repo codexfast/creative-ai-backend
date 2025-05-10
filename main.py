@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException, APIRouter
+from fastapi import FastAPI, HTTPException, APIRouter, Response
+from fastapi.responses import StreamingResponse
 from fastapi import Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -6,6 +7,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 from uuid import uuid4
+
+from io import BytesIO
+import zipfile
+import os
 
 from modules import FluxGeneration
 import threading
@@ -54,7 +59,6 @@ def process_task():
                 print(f"Processing task {task_id}")
                 task_status[task_id]["status"] = "processing"
                 task_status[task_id]["quantity"] = req.get("quantity", 1)
-                task_status[task_id]["results"] = []
                 
                 for i in range(req.get("quantity", 1)):
                     
@@ -62,7 +66,7 @@ def process_task():
                         case "portrait":
                             width, height = GenerationQuality[req.get("quality", "sm")].value
                         case "landscape":
-                            width, height = GenerationQuality[req.get("quality", "sm")][::-1]
+                            width, height = GenerationQuality[req.get("quality", "sm")].value[::-1]
                     
                     
                     img_object = FluxGeneration.generate(
@@ -99,7 +103,7 @@ def generate_image(req: GenerateImageRequest):
     body = req.dict()
 
     task_id = str(uuid4())
-    task_status[task_id] = {"status": "pending", "quantity": body["quantity"], "tags": [
+    task_status[task_id] = {"status": "pending", "results":[], "quantity": body["quantity"], "tags": [
         "Flux1.dev",
         "Baixa Qualidade" if body["quality"] == "sm" else "Qualidade Média",
         "Retrato" if body["orientation"] == "portrait" else "Horizontal"
@@ -130,6 +134,36 @@ def list_all_tasks(page: int = Query(1), limit: int = Query(5)):
         {"task_id": task_id, **info}
         for task_id, info in paginated_items
     ]
+@router.get("/download/{task_id}")
+def download_task_result(task_id: str):
+    if task_id not in task_status:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    task_results = task_status[task_id]["results"]
+    
+    if len(task_results) == 0:
+        raise HTTPException(status_code=404, detail="Results not found")
+
+    zip_buffer = BytesIO()
+
+    with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zip_file:
+        for idx, file_path in enumerate(task_results):
+            # Se os arquivos estiverem no disco
+            if os.path.isfile(f"output/{file_path}"):
+                file_name = os.path.basename(file_path)
+                zip_file.write(f"output/{file_path}", arcname=file_name)
+            else:
+                raise HTTPException(status_code=404, detail=f"File {file_path} not found")
+
+    def iter_file():
+        yield zip_buffer.getvalue()
+        
+    # Preparar resposta com o arquivo ZIP
+    headers = {
+        "Content-Disposition": f"attachment; filename={task_id}.zip"
+    }
+
+    return StreamingResponse(iter_file(), media_type="application/zip", headers=headers)
 
 # Rota raiz que retorna index.html
 @app.get("/")
