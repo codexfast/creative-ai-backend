@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from uuid import uuid4
 
-import modules.FluxGeneration
+from modules import FluxGeneration
 import threading
 import time
 
@@ -53,20 +53,20 @@ def process_task():
             try:
                 print(f"Processing task {task_id}")
                 task_status[task_id]["status"] = "processing"
-                task_status[task_id]["quantity"] = req.quantity
+                task_status[task_id]["quantity"] = req.get("quantity", 1)
                 task_status[task_id]["results"] = []
                 
-                for i in range(req.quantity):
+                for i in range(req.get("quantity", 1)):
                     
-                    match req.orientation:
+                    match req.get("orientation", "portrait"):
                         case "portrait":
-                            width, height = GenerationQuality[req.quality].value
+                            width, height = GenerationQuality[req.get("quality", "sm")].value
                         case "landscape":
-                            width, height = GenerationQuality[req.quality].value[::-1]
+                            width, height = GenerationQuality[req.get("quality", "sm")][::-1]
                     
                     
                     img_object = FluxGeneration.generate(
-                        positive_prompt=req.prompt,
+                        positive_prompt=req.get("prompt"),
                         width=width,
                         height=height,
                         seed=0,
@@ -77,8 +77,8 @@ def process_task():
                     )
                     
                     # Salva imagem
-                    filename="output/{task_id}_{i}.png"
-                    img_object.save(filename)
+                    filename=f"{task_id}_{i}.png"
+                    img_object.save("output/"+filename)
                     task_status[task_id]["results"].append(filename)
                 
                 task_status[task_id]["status"] = "done"
@@ -105,7 +105,7 @@ def generate_image(req: GenerateImageRequest):
         "Retrato" if body["orientation"] == "portrait" else "Horizontal"
     ], "prompt":body["prompt"]}
 
-    task_queue.append((task_id, req.dict()))
+    task_queue.append((task_id, body))
     return {"msg": "task created successfully", "task_id": task_id}
 
 @router.get("/task/{task_id}")
@@ -138,3 +138,12 @@ def spa():
     # return {}
 
 app.include_router(router, prefix="/api")
+
+if __name__ == "__main__":
+    import uvicorn
+    # Inicia o servidor FastAPI em uma thread separada
+    threading.Thread(target=uvicorn.run, args=(app,), kwargs={"host": "localhost", "port": 8000}).start()
+
+    # Conecta o ngrok e imprime a URL
+    public_url = ngrok.connect(8000).public_url
+    print(f"Servidor acessível em: {public_url}")
