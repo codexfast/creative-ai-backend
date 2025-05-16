@@ -22,8 +22,8 @@ app = FastAPI()
 router = APIRouter()
 
 # Monta arquivos estáticos da SPA
-# app.mount("/static", StaticFiles(directory="static/frontend"), name="static")
-# app.mount("/assets", StaticFiles(directory="static/frontend/assets"), name="assets")
+app.mount("/static", StaticFiles(directory="static/frontend"), name="static")
+app.mount("/assets", StaticFiles(directory="static/frontend/assets"), name="assets")
 app.mount("/output", StaticFiles(directory="output"), name="output")
 
 app.add_middleware(
